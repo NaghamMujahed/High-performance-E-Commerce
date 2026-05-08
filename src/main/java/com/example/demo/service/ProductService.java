@@ -10,9 +10,11 @@ import java.util.List;
 public class ProductService {
 
     private final ProductRepository repository;
+    private final NotificationService notificationService;
 
-    public ProductService(ProductRepository repository) {
+    public ProductService(ProductRepository repository , NotificationService notificationService) {
         this.repository = repository;
+        this.notificationService = notificationService;
     }
 
     public List<Product> getAllProducts() {
@@ -43,7 +45,34 @@ public class ProductService {
         return repository.save(product);
     }
 
+    public Product purchaseSync(Long id, int quantity) {
+        Product product = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("product not found"));
+        product.setQuantity(product.getQuantity() - quantity);
+        Product saved = repository.save(product);
+        notificationService.sendEmailSync(product.getName());
+        return saved;
+    }
+
+    @Transactional
+    public Product purchaseAsync(Long id, int quantity) {
+        Product product = repository.findByIdWithLock(id)
+                .orElseThrow(() -> new RuntimeException("product not found"));
+        product.setQuantity(product.getQuantity() - quantity);
+        Product saved = repository.save(product);
+        notificationService.sendEmailAsync(product.getName()); // بالخلفية فوراً
+        return saved;
+    }
+
     public void deleteAll() {
         repository.deleteAll();
+    }
+
+    @Transactional
+    public Product updateStock(Long id, int quantity) {
+        Product product = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("product not found"));
+        product.setQuantity(quantity);
+        return repository.save(product);
     }
 }

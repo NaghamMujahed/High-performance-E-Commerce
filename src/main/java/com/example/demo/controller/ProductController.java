@@ -4,7 +4,6 @@ import com.example.demo.model.Product;
 import com.example.demo.service.ProductService;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
-
 @RestController
 @RequestMapping("/products")
 public class ProductController {
@@ -37,8 +36,26 @@ public class ProductController {
         return service.purchaseWithLock(id, quantity);
     }
 
+    @PostMapping("/{id}/purchase-sync")
+    public Product purchaseSync(@PathVariable Long id,
+                                @RequestParam int quantity) {
+        return service.purchaseSync(id, quantity);
+    }
+
+    @PostMapping("/{id}/purchase-async")
+    public Product purchaseAsync(@PathVariable Long id,
+                                 @RequestParam int quantity) {
+        return service.purchaseAsync(id, quantity);
+    }
+
     @DeleteMapping
     public void deleteAll() {
         service.deleteAll();
+    }
+
+    @PutMapping("/{id}/stock")
+    public Product updateStock(@PathVariable Long id,
+                               @RequestParam int quantity) {
+        return service.updateStock(id, quantity);
     }
 }
