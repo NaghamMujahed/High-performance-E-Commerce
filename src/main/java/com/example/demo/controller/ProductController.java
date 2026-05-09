@@ -3,7 +3,10 @@ package com.example.demo.controller;
 import com.example.demo.model.Product;
 import com.example.demo.service.ProductService;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
 @RestController
 @RequestMapping("/products")
 public class ProductController {
@@ -57,5 +60,26 @@ public class ProductController {
     public Product updateStock(@PathVariable Long id,
                                @RequestParam int quantity) {
         return service.updateStock(id, quantity);
+    }
+
+
+    @PostMapping("/without-pool/{id}")
+    public String purchaseWithoutPool(@PathVariable Long id, @RequestParam int quantity) {
+        System.out.println("\n Request received: id=" + id + ", quantity=" + quantity);
+        System.out.println("   Thread: " + Thread.currentThread().getName());
+
+        String result = service.purchaseWithoutPool(id, quantity);
+
+        return result;
+    }
+
+    @PostMapping("/with-pool/{id}")
+    public String purchaseWithPool(@PathVariable Long id, @RequestParam int quantity) {
+        System.out.println("\n  Request received: id=" + id + ", quantity=" + quantity);
+        System.out.println("   Thread: " + Thread.currentThread().getName());
+
+        String result = service.purchaseWithPool(id, quantity).join();
+
+        return result;
     }
 }
