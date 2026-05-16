@@ -13,10 +13,14 @@ public class ProductService {
 
     private final ProductRepository repository;
     private final NotificationService notificationService;
+    private final PaymentService paymentService;
 
-    public ProductService(ProductRepository repository , NotificationService notificationService) {
+    public ProductService(ProductRepository repository,
+                          NotificationService notificationService,
+                          PaymentService paymentService) {
         this.repository = repository;
         this.notificationService = notificationService;
+        this.paymentService = paymentService;
     }
 
     public List<Product> getAllProducts() {
@@ -38,11 +42,9 @@ public class ProductService {
     public Product purchaseWithLock(Long id, int quantity) {
         Product product = repository.findByIdWithLock(id)
                 .orElseThrow(() -> new RuntimeException("product not found"));
-
         if (product.getQuantity() < quantity) {
             throw new RuntimeException("quantity not sufficient");
         }
-
         product.setQuantity(product.getQuantity() - quantity);
         return repository.save(product);
     }
@@ -62,7 +64,40 @@ public class ProductService {
                 .orElseThrow(() -> new RuntimeException("product not found"));
         product.setQuantity(product.getQuantity() - quantity);
         Product saved = repository.save(product);
-        notificationService.sendEmailAsync(product.getName()); // بالخلفية فوراً
+        notificationService.sendEmailAsync(product.getName());
+        return saved;
+    }
+
+    @Transactional
+    public Product buyWithPaymentSync(Long id, int quantity, Long userId) {
+        Product product = repository.findByIdWithLock(id)
+                .orElseThrow(() -> new RuntimeException("product not found"));
+
+        if (product.getQuantity() < quantity) {
+            throw new RuntimeException("quantity not sufficient");
+        }
+        double totalAmount = product.getPrice() * quantity;
+
+        paymentService.processPaymentSync(userId, totalAmount);
+        product.setQuantity(product.getQuantity() - quantity);
+        return repository.save(product);
+    }
+
+    @Transactional
+    public Product buyWithPaymentAsync(Long id, int quantity, Long userId) {
+        Product product = repository.findByIdWithLock(id)
+                .orElseThrow(() -> new RuntimeException("product not found"));
+
+        if (product.getQuantity() < quantity) {
+            throw new RuntimeException("quantity not sufficient");
+        }
+        double totalAmount = product.getPrice() * quantity;
+
+        paymentService.processPaymentAsync(userId, totalAmount);
+
+        product.setQuantity(product.getQuantity() - quantity);
+        Product saved = repository.save(product);
+
         return saved;
     }
 

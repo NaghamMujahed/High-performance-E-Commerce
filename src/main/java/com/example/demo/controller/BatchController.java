@@ -44,4 +44,14 @@ public class BatchController {
         batchService.processSalesInChunks();
         return "Processing was done in batches";
     }
+
+    @DeleteMapping("/delete-all")
+    public void deleteAll() {
+        saleRepository.deleteAll();
+    }
+
+    @GetMapping("/count")
+    public long count() {
+        return saleRepository.count();
+    }
 }

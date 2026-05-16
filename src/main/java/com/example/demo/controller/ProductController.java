@@ -51,6 +51,20 @@ public class ProductController {
         return service.purchaseAsync(id, quantity);
     }
 
+    @PostMapping("/{id}/buy-sync")
+    public Product buySync(@PathVariable Long id,
+                           @RequestParam int quantity,
+                           @RequestParam Long userId) {
+        return service.buyWithPaymentSync(id, quantity, userId);
+    }
+
+    @PostMapping("/{id}/buy-async")
+    public Product buyAsync(@PathVariable Long id,
+                            @RequestParam int quantity,
+                            @RequestParam Long userId) {
+        return service.buyWithPaymentAsync(id, quantity, userId);
+    }
+
     @DeleteMapping
     public void deleteAll() {
         service.deleteAll();
@@ -61,7 +75,6 @@ public class ProductController {
                                @RequestParam int quantity) {
         return service.updateStock(id, quantity);
     }
-
 
     @PostMapping("/without-pool/{id}")
     public String purchaseWithoutPool(@PathVariable Long id, @RequestParam int quantity) {
