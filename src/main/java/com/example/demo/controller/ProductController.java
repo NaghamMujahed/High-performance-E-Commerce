@@ -76,23 +76,13 @@ public class ProductController {
         return service.updateStock(id, quantity);
     }
 
-    @PostMapping("/without-pool/{id}")
+    @PostMapping("/without-Virtual/{id}")
     public String purchaseWithoutPool(@PathVariable Long id, @RequestParam int quantity) {
-        System.out.println("\n Request received: id=" + id + ", quantity=" + quantity);
-        System.out.println("   Thread: " + Thread.currentThread().getName());
-
-        String result = service.purchaseWithoutPool(id, quantity);
-
-        return result;
+        return service.purchaseWithoutVirtual(id, quantity);
     }
 
-    @PostMapping("/with-pool/{id}")
+    @PostMapping("/with-Virtual/{id}")
     public String purchaseWithPool(@PathVariable Long id, @RequestParam int quantity) {
-        System.out.println("\n  Request received: id=" + id + ", quantity=" + quantity);
-        System.out.println("   Thread: " + Thread.currentThread().getName());
-
-        String result = service.purchaseWithPool(id, quantity).join();
-
-        return result;
+        return service.purchaseWithVirtual(id, quantity).join();
     }
 }

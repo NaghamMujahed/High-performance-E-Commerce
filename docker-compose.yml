@@ -1,23 +1,35 @@
 version: '3.8'
 
 services:
-  nginx:
-    image: nginx:alpine
+
+  lb:
+    build: .
+    container_name: load-balancer
+
     ports:
-      - "8080:80"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - "8080:8080"
+
+    environment:
+      SERVER_PORT: 8080
+      APP_ROLE: loadbalancer
+
+      # host:port:weight
+      BACKEND_INSTANCES: app1:8080:1,app2:8080:3,app3:8080:2
+
     depends_on:
       - app1
       - app2
       - app3
+
     networks:
       - ecommerce-net
 
   app1:
     build: .
     environment:
-      - SERVER_PORT=8080
+      SERVER_PORT: 8080
+      APP_ROLE: worker
+      APP_NAME: app2
     depends_on:
       mysql:
         condition: service_healthy
@@ -31,7 +43,9 @@ services:
   app2:
     build: .
     environment:
-      - SERVER_PORT=8080
+      SERVER_PORT: 8080
+      APP_ROLE: worker
+      APP_NAME: app2
     depends_on:
       mysql:
         condition: service_healthy
@@ -45,7 +59,9 @@ services:
   app3:
     build: .
     environment:
-      - SERVER_PORT=8080
+      SERVER_PORT: 8080
+      APP_ROLE: worker
+      APP_NAME: app2
     depends_on:
       mysql:
         condition: service_healthy

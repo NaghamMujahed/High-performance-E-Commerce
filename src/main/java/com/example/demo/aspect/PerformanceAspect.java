@@ -14,7 +14,7 @@ public class PerformanceAspect {
     private static final Logger logger =
             LoggerFactory.getLogger(PerformanceAspect.class);
 
-    @Around("execution(* com.example.demo.service.*.*(..))")
+    @Around("execution(* com.example.demo..service.*.*(..))")
     public Object measurePerformance(ProceedingJoinPoint joinPoint) throws Throwable {
 
         String methodName = joinPoint.getSignature().getName();
