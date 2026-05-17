@@ -3,12 +3,19 @@ package com.example.demo.controller;
 import com.example.demo.model.Server;
 import com.example.demo.service.LoadBalancerService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.client.RestTemplate;
 
 @RestController
-@RequestMapping("/api")
 public class LoadBalancerController {
+
+    @Value("${APP_ROLE}")
+    private String role;
+
+    @Value("${APP_NAME:unknown}")
+    private String appName;
 
     @Autowired
     private LoadBalancerService loadBalancerService;
@@ -16,20 +23,26 @@ public class LoadBalancerController {
     @Autowired
     private RestTemplate restTemplate;
 
-    @GetMapping("/loadBalancer")
-    public String balanceRequest() {
+    @GetMapping("/api/loadBalancer")
+    public String handleRequest() throws InterruptedException {
+        if (role.equals("loadbalancer")) {
 
-        Server server = loadBalancerService.getBestServer();
+            Server server = loadBalancerService.getBestServer();
 
-        try {
+            try {
 
-            String url = server.getUrl() + "/worker/test";
+                String url = server.getUrl() + "/api/loadBalancer";
 
-            return restTemplate.getForObject(url, String.class);
+                return restTemplate.getForObject(url, String.class);
 
-        } finally {
+            } finally {
 
-            loadBalancerService.releaseServer(server);
+                loadBalancerService.releaseServer(server);
+            }
         }
+
+        Thread.sleep(2000);
+
+        return "Response from: " + appName;
     }
 }
