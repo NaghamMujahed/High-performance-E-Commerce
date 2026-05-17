@@ -16,7 +16,7 @@ public class LoadBalancerController {
     @Autowired
     private RestTemplate restTemplate;
 
-    @GetMapping("/test")
+    @GetMapping("/loadBalancer")
     public String balanceRequest() {
 
         Server server = loadBalancerService.getBestServer();
