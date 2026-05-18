@@ -24,6 +24,7 @@ public class LoadBalancerService {
 
     @PostConstruct
     public void init() {
+
         String[] instances = backendInstances.split(",");
 
         for (String instance : instances) {
@@ -112,5 +113,14 @@ public class LoadBalancerService {
                 server.getUrl(),
                 server.getActiveConnections()
         );
+    }
+
+
+    public Server getBatchServer() {
+
+        return servers.stream()
+                .filter(server -> server.getUrl().contains("app1"))
+                .findFirst()
+                .orElseThrow();
     }
 }

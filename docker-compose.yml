@@ -26,10 +26,14 @@ services:
 
   app1:
     build: .
+    ports:
+      - "8081:8080"
     environment:
-      SERVER_PORT: 8080
-      APP_ROLE: worker
-      APP_NAME: app2
+      - SERVER_PORT=8080
+      - APP_ROLE=worker
+      - APP_NAME=app1
+      - BATCH_JOB_ENABLED=true
+      - SPRING_BATCH_JOB_ENABLED=false
     depends_on:
       mysql:
         condition: service_healthy
@@ -42,10 +46,13 @@ services:
 
   app2:
     build: .
+    ports:
+      - "8082:8080"
     environment:
-      SERVER_PORT: 8080
-      APP_ROLE: worker
-      APP_NAME: app2
+      - SERVER_PORT=8080
+      - APP_ROLE=worker
+      - APP_NAME=app2
+      - BATCH_JOB_ENABLED=false
     depends_on:
       mysql:
         condition: service_healthy
@@ -58,10 +65,13 @@ services:
 
   app3:
     build: .
+    ports:
+      - "8083:8080"
     environment:
-      SERVER_PORT: 8080
-      APP_ROLE: worker
-      APP_NAME: app2
+      - SERVER_PORT=8080
+      - APP_ROLE=worker
+      - APP_NAME=app3
+      - BATCH_JOB_ENABLED=false
     depends_on:
       mysql:
         condition: service_healthy
@@ -77,6 +87,8 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: root
       MYSQL_DATABASE: ecommerce
+    volumes:
+      - mysql_data:/var/lib/mysql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
       interval: 10s
@@ -99,9 +111,16 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
     networks:
       - ecommerce-net
 
 networks:
   ecommerce-net:
     driver: bridge
+
+volumes:
+  mysql_data:
+  rabbitmq_data:
