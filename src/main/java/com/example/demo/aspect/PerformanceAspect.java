@@ -11,8 +11,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class PerformanceAspect {
 
-    private static final Logger logger =
-            LoggerFactory.getLogger(PerformanceAspect.class);
+    private static final Logger logger = LoggerFactory.getLogger(PerformanceAspect.class);
 
     @Around("execution(* com.example.demo..service.*.*(..))")
     public Object measurePerformance(ProceedingJoinPoint joinPoint) throws Throwable {
@@ -31,15 +30,13 @@ public class PerformanceAspect {
             return result;
 
         } catch (Exception e) {
-            long time =
-                    System.currentTimeMillis() - start;
+            long time = System.currentTimeMillis() - start;
             logger.error(
                     "Failed: {}.{} | Time: {}ms | Reason: {}",
                     className,
                     methodName,
                     time,
-                    e.getMessage()
-            );
+                    e.getMessage());
             throw e;
         }
     }
@@ -60,9 +57,25 @@ public class PerformanceAspect {
                 "[PURCHASE] Finished: {} | Time: {}ms | Thread: {}",
                 methodName,
                 time,
-                Thread.currentThread().getName()
-        );
+                Thread.currentThread().getName());
 
         return result;
+    }
+
+    @Around("execution(* com.example.demo.service.ProductService.safeGetTopProductDetails*(..)) || " +
+            "execution(* com.example.demo.service.ProductService.loadTopProductsFromDb.*(..)) || " +
+            "execution(* com.example.demo.service.ProductService.updateProduct.*(..))")
+    public Object measureCacheRelatedMethods(ProceedingJoinPoint pjp) throws Throwable {
+        long start = System.nanoTime();
+
+        try {
+            return pjp.proceed();
+        } finally {
+            long durationMs = (System.nanoTime() - start) / 1_000_000;
+
+            logger.info("CACHE_PERF method={} durationMs={}",
+                    pjp.getSignature().toShortString(),
+                    durationMs);
+        }
     }
 }

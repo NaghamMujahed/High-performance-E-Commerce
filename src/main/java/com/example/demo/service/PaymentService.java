@@ -27,7 +27,7 @@ public class PaymentService {
 
     @Transactional
     public boolean processPaymentSync(Long userId, double amount) {
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdWithLock(userId)
                 .orElseThrow(() -> new RuntimeException("user not found"));
         if (user.getBalance() < amount) {
             throw new RuntimeException("insufficient balance");
@@ -48,7 +48,7 @@ public class PaymentService {
 
     @Transactional
     public void processPaymentAsync(Long userId, double amount) {
-        User user = userRepository.findById(userId)
+        User user = userRepository.findByIdWithLock(userId)
                 .orElseThrow(() -> new RuntimeException("user not found"));
         if (user.getBalance() < amount) {
             throw new RuntimeException("insufficient balance");

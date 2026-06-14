@@ -12,7 +12,7 @@ import org.springframework.web.client.RestTemplate;
 @RestController
 public class LoadBalancerController {
 
-    @Value("${APP_ROLE}")
+    @Value("${APP_ROLE:worker}")
     private String role;
 
     @Value("${APP_NAME:unknown}")

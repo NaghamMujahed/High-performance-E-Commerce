@@ -22,7 +22,7 @@ public class BatchController {
     private final LoadBalancerService loadBalancerService;
     private final RestTemplate restTemplate;
 
-    @Value("${APP_ROLE}")
+    @Value("${APP_ROLE:worker}")
     private String role;
 
     public BatchController(

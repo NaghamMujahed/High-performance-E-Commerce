@@ -34,6 +34,13 @@ services:
       - APP_NAME=app1
       - BATCH_JOB_ENABLED=true
       - SPRING_BATCH_JOB_ENABLED=false
+      - APP_SEED_ENABLED=true
+      - APP_SEED_USERS=1000
+      - APP_SEED_PRODUCTS=500
+      - APP_SEED_ORDERS=5000
+      - APP_SEED_SALES=20000
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
     depends_on:
       mysql:
         condition: service_healthy
@@ -53,6 +60,8 @@ services:
       - APP_ROLE=worker
       - APP_NAME=app2
       - BATCH_JOB_ENABLED=false
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
     depends_on:
       mysql:
         condition: service_healthy
@@ -72,6 +81,8 @@ services:
       - APP_ROLE=worker
       - APP_NAME=app3
       - BATCH_JOB_ENABLED=false
+      - SPRING_DATA_REDIS_HOST=redis
+      - SPRING_DATA_REDIS_PORT=6379
     depends_on:
       mysql:
         condition: service_healthy
@@ -90,7 +101,7 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot"]
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot" ]
       interval: 10s
       timeout: 5s
       retries: 5

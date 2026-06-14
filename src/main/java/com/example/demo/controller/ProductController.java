@@ -1,7 +1,12 @@
 package com.example.demo.controller;
 
+import com.example.demo.dto.ProductDetailsResponse;
+import com.example.demo.dto.UpdateProductRequest;
 import com.example.demo.model.Product;
 import com.example.demo.service.ProductService;
+
+import jakarta.validation.Valid;
+
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -29,39 +34,39 @@ public class ProductController {
 
     @PostMapping("/{id}/purchase-unsafe")
     public Product purchaseUnsafe(@PathVariable Long id,
-                                  @RequestParam int quantity) {
+            @RequestParam int quantity) {
         return service.purchaseWithoutLock(id, quantity);
     }
 
     @PostMapping("/{id}/purchase")
     public Product purchaseSafe(@PathVariable Long id,
-                                @RequestParam int quantity) {
+            @RequestParam int quantity) {
         return service.purchaseWithLock(id, quantity);
     }
 
     @PostMapping("/{id}/purchase-sync")
     public Product purchaseSync(@PathVariable Long id,
-                                @RequestParam int quantity) {
+            @RequestParam int quantity) {
         return service.purchaseSync(id, quantity);
     }
 
     @PostMapping("/{id}/purchase-async")
     public Product purchaseAsync(@PathVariable Long id,
-                                 @RequestParam int quantity) {
+            @RequestParam int quantity) {
         return service.purchaseAsync(id, quantity);
     }
 
     @PostMapping("/{id}/buy-sync")
     public Product buySync(@PathVariable Long id,
-                           @RequestParam int quantity,
-                           @RequestParam Long userId) {
+            @RequestParam int quantity,
+            @RequestParam Long userId) {
         return service.buyWithPaymentSync(id, quantity, userId);
     }
 
     @PostMapping("/{id}/buy-async")
     public Product buyAsync(@PathVariable Long id,
-                            @RequestParam int quantity,
-                            @RequestParam Long userId) {
+            @RequestParam int quantity,
+            @RequestParam Long userId) {
         return service.buyWithPaymentAsync(id, quantity, userId);
     }
 
@@ -72,7 +77,7 @@ public class ProductController {
 
     @PutMapping("/{id}/stock")
     public Product updateStock(@PathVariable Long id,
-                               @RequestParam int quantity) {
+            @RequestParam int quantity) {
         return service.updateStock(id, quantity);
     }
 
@@ -86,4 +91,26 @@ public class ProductController {
         return service.purchaseWithVirtual(id, quantity).join();
     }
 
+    // ********************** Cache Redis Methods ************************* //
+
+    @GetMapping("/top-selling/without-cache")
+    public List<ProductDetailsResponse> getTopSellingWithoutCache(
+            @RequestParam(defaultValue = "10") int limit) {
+        return service.loadTopProductsFromDb(limit);
+    }
+
+    @GetMapping("/top-selling/by-cache")
+    public List<ProductDetailsResponse> getTopSellingByCache(
+            @RequestParam(defaultValue = "10") int limit) {
+        return service.safeGetTopProductDetails(limit);
+    }
+
+    @PutMapping("/{productId}")
+    public void updateProduct(
+            @PathVariable Long productId,
+            @Valid @RequestBody UpdateProductRequest request) {
+        service.updateProduct(productId, request);
+    }
+
+    // ********************** End: Cache Redis Methods ************************* //
 }

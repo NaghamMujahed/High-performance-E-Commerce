@@ -1,32 +1,32 @@
 package com.example.demo.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(
-        name = "users",
+        name = "categories",
         indexes = {
-                @Index(name = "idx_users_email", columnList = "email"),
-                @Index(name = "idx_users_status", columnList = "status")
+                @Index(name = "idx_categories_name", columnList = "name"),
+                @Index(name = "idx_categories_active", columnList = "active")
         }
 )
-public class User {
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+public class Category {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     private String name;
-    private String email;
-    private String password;
-    private double balance;
-    private String role = "CUSTOMER";
-    private String status = "ACTIVE";
+    @Column(length = 1000)
+    private String description;
+    private boolean active = true;
     @Column(name = "created_at")
     private LocalDateTime createdAt;
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    public User() {}
+    public Category() {}
 
     @PrePersist
     public void prePersist() {
@@ -35,12 +35,6 @@ public class User {
             createdAt = now;
         }
         updatedAt = now;
-        if (role == null) {
-            role = "CUSTOMER";
-        }
-        if (status == null) {
-            status = "ACTIVE";
-        }
     }
 
     @PreUpdate
@@ -50,21 +44,15 @@ public class User {
 
     public Long getId() { return id; }
     public String getName() { return name; }
-    public String getEmail() { return email; }
-    public String getPassword() { return password; }
-    public double getBalance() { return balance; }
-    public String getRole() { return role; }
-    public String getStatus() { return status; }
+    public String getDescription() { return description; }
+    public boolean isActive() { return active; }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
 
     public void setId(Long id) { this.id = id; }
     public void setName(String name) { this.name = name; }
-    public void setEmail(String email) { this.email = email; }
-    public void setPassword(String password) { this.password = password; }
-    public void setBalance(double balance) { this.balance = balance; }
-    public void setRole(String role) { this.role = role; }
-    public void setStatus(String status) { this.status = status; }
+    public void setDescription(String description) { this.description = description; }
+    public void setActive(boolean active) { this.active = active; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
