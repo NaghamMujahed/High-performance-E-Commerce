@@ -21,7 +21,7 @@ public class StartupJobRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws Exception {
         if (batchEnabled) {
-            batchService.processSalesInChunks();
+            batchService.runBatchJob();
         }
     }
 }

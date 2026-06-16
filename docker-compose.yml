@@ -12,14 +12,24 @@ services:
     environment:
       SERVER_PORT: 8080
       APP_ROLE: loadbalancer
+      SPRING_BATCH_JOB_ENABLED: false
 
       # host:port:weight
       BACKEND_INSTANCES: app1:8080:1,app2:8080:3,app3:8080:2
 
     depends_on:
-      - app1
-      - app2
-      - app3
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      app1:
+        condition: service_started
+      app2:
+        condition: service_started
+      app3:
+        condition: service_started
 
     networks:
       - ecommerce-net
@@ -45,7 +55,7 @@ services:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       rabbitmq:
         condition: service_started
     networks:
@@ -59,14 +69,15 @@ services:
       - SERVER_PORT=8080
       - APP_ROLE=worker
       - APP_NAME=app2
-      - BATCH_JOB_ENABLED=false
+      - BATCH_JOB_ENABLED=true
+      - SPRING_BATCH_JOB_ENABLED=false
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
     depends_on:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       rabbitmq:
         condition: service_started
     networks:
@@ -80,14 +91,15 @@ services:
       - SERVER_PORT=8080
       - APP_ROLE=worker
       - APP_NAME=app3
-      - BATCH_JOB_ENABLED=false
+      - BATCH_JOB_ENABLED=true
+      - SPRING_BATCH_JOB_ENABLED=false
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
     depends_on:
       mysql:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
       rabbitmq:
         condition: service_started
     networks:
@@ -113,6 +125,12 @@ services:
     image: redis:alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
     networks:
       - ecommerce-net
 

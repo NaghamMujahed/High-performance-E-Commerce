@@ -29,8 +29,7 @@ public class BatchController {
             BatchService batchService,
             SaleRepository saleRepository,
             LoadBalancerService loadBalancerService,
-            RestTemplate restTemplate
-    ) {
+            RestTemplate restTemplate) {
         this.batchService = batchService;
         this.saleRepository = saleRepository;
         this.loadBalancerService = loadBalancerService;
@@ -104,7 +103,7 @@ public class BatchController {
             return "No unprocessed records found";
         }
 
-        batchService.processSalesInChunks();
+        batchService.runBatchJob();
 
         return "Job launched for " + pending + " records";
     }

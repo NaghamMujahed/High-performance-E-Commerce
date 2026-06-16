@@ -1,5 +1,8 @@
 package com.example.demo.service;
 
+import java.time.Clock;
+import java.time.LocalDate;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.batch.core.BatchStatus;
@@ -14,15 +17,21 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import com.example.demo.model.Sale;
 import com.example.demo.repository.SaleRepository;
+
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+
 import org.springframework.batch.core.JobInstance;
 import org.springframework.batch.core.repository.JobRepository;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.batch.core.ExitStatus;
 
 @Service
 public class BatchService {
 
-    private static final Logger logger =
-            LoggerFactory.getLogger(BatchService.class);
+    private static final Logger logger = LoggerFactory.getLogger(BatchService.class);
+
+    @Value("${APP_NAME:worker}")
+    private String role;
 
     private final JobLauncher jobLauncher;
     private final Job salesInventoryJob;
@@ -32,8 +41,8 @@ public class BatchService {
     private final JobRepository jobRepository;
 
     public BatchService(JobLauncher jobLauncher, Job salesInventoryJob,
-                        SaleRepository saleRepository,
-                        JobExplorer jobExplorer, JobOperator jobOperator , JobRepository jobRepository) {
+            SaleRepository saleRepository,
+            JobExplorer jobExplorer, JobOperator jobOperator, JobRepository jobRepository) {
         this.jobLauncher = jobLauncher;
         this.salesInventoryJob = salesInventoryJob;
         this.saleRepository = saleRepository;
@@ -52,11 +61,18 @@ public class BatchService {
     }
 
     @Scheduled(cron = "0 0 2 * * *")
+    @SchedulerLock(name = "daily-sales-job-scheduler", lockAtMostFor = "PT2H", lockAtLeastFor = "PT1M")
     public void runBatchJob() {
-        processSalesInChunks();
+        // Some metrics for seventh requirment.
+        LocalDate salesDate = LocalDate.now(Clock.systemDefaultZone()).minusDays(1);
+        logger.info("Instance {} acquired scheduler lock for DailySalesJob, salesDate={}", role, salesDate);
+        // logger.info("Instance {} Srart DailySalesJob, salesDate={}", role,
+        // salesDate);
+
+        processSalesInChunks(salesDate);
     }
 
-    public void processSalesInChunks() {
+    public void processSalesInChunks(LocalDate salesDate) {
         try {
             JobInstance lastInstance = jobExplorer.getLastJobInstance("salesInventoryJob");
 
@@ -93,6 +109,7 @@ public class BatchService {
             }
 
             JobParameters params = new JobParametersBuilder()
+                    .addString("salesDate", salesDate.toString()) // We just added this parameter for seventh req.
                     .addLong("startTime", System.currentTimeMillis())
                     .toJobParameters();
 

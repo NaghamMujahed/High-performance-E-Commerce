@@ -8,13 +8,15 @@ import com.example.demo.model.OrderStatus;
 import com.example.demo.model.Product;
 import com.example.demo.repository.ProductRepository;
 
+import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -28,6 +30,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @RequiredArgsConstructor
@@ -37,10 +40,13 @@ public class ProductService {
     private final NotificationService notificationService;
     private final PaymentService paymentService;
 
-    // Cache Attributes
+    // Cache Attributes for sixth requirment.
     private RedisTemplate<String, List<ProductDetailsResponse>> redisTemplate;
     private StringRedisTemplate stringRedisTemplate;
     private MeterRegistry meterRegistry;
+
+    // Redisson lock attribute for seventh requirment.
+    private RedissonClient redissonClient;
 
     private static final Logger log = LoggerFactory.getLogger(ProductService.class);
 
@@ -49,13 +55,15 @@ public class ProductService {
             PaymentService paymentService,
             MeterRegistry meterRegistry,
             StringRedisTemplate stringRedisTemplate,
-            RedisTemplate<String, List<ProductDetailsResponse>> redisTemplate) {
+            RedisTemplate<String, List<ProductDetailsResponse>> redisTemplate,
+            RedissonClient redissonClient) {
         this.repository = repository;
         this.notificationService = notificationService;
         this.paymentService = paymentService;
         this.meterRegistry = meterRegistry;
         this.redisTemplate = redisTemplate;
         this.stringRedisTemplate = stringRedisTemplate;
+        this.redissonClient = redissonClient;
     }
 
     public List<Product> getAllProducts() {
@@ -213,106 +221,278 @@ public class ProductService {
         }
     }
 
-    @SuppressWarnings("unchecked")
     public List<ProductDetailsResponse> getTopProductDetailsByCache(int limit) {
-        String key = "topProducts:" + limit;
+        String freshKey = freshKey(limit);
+        String staleKey = staleKey(limit);
+        // String lockKey = lockKey(limit);
 
-        Timer.Sample redisGetSample = Timer.start(meterRegistry);
+        List<ProductDetailsResponse> fresh = readListFromRedis(freshKey);
 
-        Object cached = null;
+        if (fresh != null) {
+            incrementCacheMetric("app.cache.hit", "topProducts");
+
+            return fresh;
+        }
+
+        incrementCacheMetric("app.cache.miss", "topProducts");
+
+        // RLock lock = redissonClient.getLock(lockKey);
+
+        // boolean acquired = false;
+        // Timer.Sample waitSample = Timer.start(meterRegistry);
+
         try {
-            cached = redisTemplate.opsForValue().get(key);
-        } finally {
-            redisGetSample.stop(Timer.builder("ecommerce.redis.latency")
-                    .tag("operation", "GET")
-                    .tag("cache", "topProducts")
-                    .register(meterRegistry));
+            // acquired = lock.tryLock(150, 10, TimeUnit.MILLISECONDS); // waitTime = 150ms,
+            // leaseTime = 10s
+
+            // waitSample.stop(Timer.builder("app.distributed_lock.wait")
+            // .tag("lock", "topProductsRebuild")
+            // .register(meterRegistry));
+
+            // if (acquired) {
+            // incrementLockMetric("app.distributed_lock.acquired", "topProductsRebuild");
+
+            // return rebuildCacheWithDoubleCheck(limit, freshKey, staleKey);
+            // }
+
+            // incrementLockMetric("app.distributed_lock.skipped", "topProductsRebuild");
+
+            // List<ProductDetailsResponse> stale = readListFromRedis(staleKey);
+
+            // if (stale != null) {
+            // incrementCacheMetric("app.cache.stale_served", "topProducts");
+            // return stale;
+            // }
+
+            // sleepBriefly();
+
+            // List<ProductDetailsResponse> afterWait = readListFromRedis(freshKey);
+
+            // if (afterWait != null) {
+            // incrementCacheMetric("app.cache.hit_after_wait", "topProducts");
+            // return afterWait;
+            // }
+
+            // incrementCacheMetric("app.cache.fallback_db", "topProducts");
+
+            // Fallback أخير:
+            // نقرأ قاعدة البيانات حتى لا يفشل الطلب، لكن لا نعيد بناء الكاش هنا
+            // لأننا لم نملك قفل.
+            return rebuildCacheWithDoubleCheck(limit, freshKey, staleKey);
+
+        } catch (Exception ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for top products lock", ex);
+
+        }
+        // finally {
+        // // if (acquired && lock.isHeldByCurrentThread()) {
+        // // lock.unlock();
+        // // }
+        // }
+    }
+
+    private List<ProductDetailsResponse> rebuildCacheWithDoubleCheck(int limit, String freshKey, String staleKey) {
+
+        // Double-check:
+        // ربما thread آخر بنى الكاش بين miss وأخذ lock.
+        List<ProductDetailsResponse> existing = readListFromRedis(freshKey);
+
+        if (existing != null) {
+            incrementCacheMetric("app.cache.hit_after_lock", "topProducts");
+            return existing;
         }
 
-        if (cached != null && cached instanceof List<?> response) {
-            meterRegistry.counter("ecommerce.cache.hit", "cache", "topProducts").increment();
-            log.info("CACHE_HIT cache=topProducts key={}", key);
+        Timer.Sample rebuildSample = Timer.start(meterRegistry);
 
-            return (List<ProductDetailsResponse>) response;
-        }
+        List<ProductDetailsResponse> loaded = loadTopProductsFromDb(limit);
 
-        meterRegistry.counter("ecommerce.cache.miss", "cache", "topProducts").increment();
-        log.info("CACHE_MISS cache=topProducts key={}", key);
+        rebuildSample.stop(Timer.builder("app.cache.rebuild.duration")
+                .tag("cache", "topProducts")
+                .register(meterRegistry));
 
-        String lockKey = "lock:" + key;
-        Boolean lockAcquired = stringRedisTemplate.opsForValue()
-                .setIfAbsent(lockKey, "1", Duration.ofSeconds(5));
+        Duration freshTtl = Duration.ofSeconds(90)
+                .plusSeconds(ThreadLocalRandom.current().nextInt(0, 10));
 
-        if (Boolean.TRUE.equals(lockAcquired)) {
-            try {
-                List<ProductDetailsResponse> loaded = loadTopProductsFromDb(limit);
+        Duration staleTtl = Duration.ofMinutes(10);
 
-                Duration ttlWithJitter = Duration.ofMinutes(5)
-                        .plusSeconds(ThreadLocalRandom.current().nextInt(0, 30));
+        redisTemplate.opsForValue().set(freshKey, loaded, freshTtl);
+        redisTemplate.opsForValue().set(staleKey, loaded, staleTtl);
 
-                Timer.Sample redisSetSample = Timer.start(meterRegistry);
+        incrementCacheMetric("app.cache.rebuild.success", "topProducts");
 
-                try {
-                    redisTemplate.opsForValue().set(key, loaded, ttlWithJitter);
-                } finally {
-                    redisSetSample.stop(Timer.builder("ecommerce.redis.latency")
-                            .tag("operation", "SET")
-                            .tag("cache", "topProducts")
-                            .register(meterRegistry));
-                }
-
-                return loaded;
-            } finally {
-                stringRedisTemplate.delete(lockKey);
-            }
-        }
-
-        meterRegistry.counter("ecommerce.cache.lock_wait", "cache", "topProducts").increment();
-        /*
-         * اذا لم يحصل هذا الطلب على قفل.
-         * ننتظر قليلاً ثم نحاول قراءة الكاش مرة أخرى.
-         */
-        sleepShortly();
-
-        Object afterWait = redisTemplate.opsForValue().get(key);
-        if (afterWait instanceof List<?> response) {
-            meterRegistry.counter("ecommerce.cache.hit_after_wait", "cache", "topProducts").increment();
-            return (List<ProductDetailsResponse>) response;
-        }
-
-        /*
-         * fallback: نقرأ من قاعدة البيانات بشكل مباشر حتى لا يتعطل الطلب.
-         */
-        meterRegistry.counter("ecommerce.cache.fallback_to_db_after_wait", "cache", "topProducts").increment();
-
-        return loadTopProductsFromDb(limit);
+        return loaded;
     }
 
     public List<ProductDetailsResponse> loadTopProductsFromDb(int limit) {
-        meterRegistry.counter("ecommerce.db.query", "query", "findTopSellingProducts").increment();
+        meterRegistry.counter("app.db.query", "query", "findTopSellingProducts").increment();
 
         Timer.Sample dbSample = Timer.start(meterRegistry);
 
         try {
+            log.info("DB_QUERY topProducts limit={}", limit);
+
             return repository.findTopSellingProducts(OrderStatus.DELIVERED, PageRequest.of(0, limit))
                     .stream()
                     .map(ProductMapper::toDetailsRecord)
                     .toList();
-
         } finally {
-            dbSample.stop(Timer.builder("ecommerce.db.query.latency")
+            dbSample.stop(Timer.builder("app.db.query.duration")
                     .tag("query", "findTopSellingProducts")
                     .register(meterRegistry));
         }
     }
 
-    private void sleepShortly() {
+    @SuppressWarnings("unchecked")
+    private List<ProductDetailsResponse> readListFromRedis(String key) {
+        Object value = redisTemplate.opsForValue().get(key);
+
+        if (value == null) {
+            return null;
+        }
+
+        return (List<ProductDetailsResponse>) value;
+    }
+
+    private String freshKey(int limit) {
+        return "top-products:limit:" + limit;
+    }
+
+    private String staleKey(int limit) {
+        return "top-products:stale:limit:" + limit;
+    }
+
+    private String lockKey(int limit) {
+        return "lock:cache-rebuild:top-products:limit:" + limit;
+    }
+
+    private void incrementCacheMetric(String metricName, String cacheName) {
+        meterRegistry.counter(metricName, "cache", cacheName).increment();
+    }
+
+    private void incrementLockMetric(String metricName, String lockName) {
+        meterRegistry.counter(metricName, "lock", lockName).increment();
+    }
+
+    private void sleepBriefly() {
         try {
-            Thread.sleep(250);
-        } catch (InterruptedException e) {
+            Thread.sleep(150);
+        } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
         }
     }
+
+    // @SuppressWarnings("unchecked")
+    // public List<ProductDetailsResponse> getTopProductDetailsByCache(int limit) {
+    // String key = "topProducts:" + limit;
+
+    // Timer.Sample redisGetSample = Timer.start(meterRegistry);
+
+    // Object cached = null;
+    // try {
+    // cached = redisTemplate.opsForValue().get(key);
+    // } finally {
+    // redisGetSample.stop(Timer.builder("ecommerce.redis.latency")
+    // .tag("operation", "GET")
+    // .tag("cache", "topProducts")
+    // .register(meterRegistry));
+    // }
+
+    // if (cached != null && cached instanceof List<?> response) {
+    // meterRegistry.counter("ecommerce.cache.hit", "cache",
+    // "topProducts").increment();
+    // log.info("CACHE_HIT cache=topProducts key={}", key);
+
+    // return (List<ProductDetailsResponse>) response;
+    // }
+
+    // meterRegistry.counter("ecommerce.cache.miss", "cache",
+    // "topProducts").increment();
+    // log.info("CACHE_MISS cache=topProducts key={}", key);
+
+    // String lockKey = "lock:" + key;
+    // Boolean lockAcquired = stringRedisTemplate.opsForValue()
+    // .setIfAbsent(lockKey, "1", Duration.ofSeconds(5));
+
+    // if (Boolean.TRUE.equals(lockAcquired)) {
+    // try {
+    // List<ProductDetailsResponse> loaded = loadTopProductsFromDb(limit);
+
+    // Duration ttlWithJitter = Duration.ofMinutes(5)
+    // .plusSeconds(ThreadLocalRandom.current().nextInt(0, 30));
+
+    // Timer.Sample redisSetSample = Timer.start(meterRegistry);
+
+    // try {
+    // redisTemplate.opsForValue().set(key, loaded, ttlWithJitter);
+    // } finally {
+    // redisSetSample.stop(Timer.builder("ecommerce.redis.latency")
+    // .tag("operation", "SET")
+    // .tag("cache", "topProducts")
+    // .register(meterRegistry));
+    // }
+
+    // return loaded;
+    // } finally {
+    // stringRedisTemplate.delete(lockKey);
+    // }
+    // }
+
+    // meterRegistry.counter("ecommerce.cache.lock_wait", "cache",
+    // "topProducts").increment();
+    // /*
+    // * اذا لم يحصل هذا الطلب على قفل.
+    // * ننتظر قليلاً ثم نحاول قراءة الكاش مرة أخرى.
+    // */
+    // sleepShortly();
+
+    // Object afterWait = redisTemplate.opsForValue().get(key);
+    // if (afterWait instanceof List<?> response) {
+    // meterRegistry.counter("ecommerce.cache.hit_after_wait", "cache",
+    // "topProducts").increment();
+    // return (List<ProductDetailsResponse>) response;
+    // }
+
+    // /*
+    // * fallback: نقرأ من قاعدة البيانات بشكل مباشر حتى لا يتعطل الطلب.
+    // */
+    // meterRegistry.counter("ecommerce.cache.fallback_to_db_after_wait", "cache",
+    // "topProducts").increment();
+
+    // return loadTopProductsFromDb(limit);
+    // }
+
+    // public List<ProductDetailsResponse> loadTopProductsFromDb(int limit) {
+    // meterRegistry.counter("ecommerce.db.query", "query",
+    // "findTopSellingProducts").increment();
+
+    // Timer.Sample dbSample = Timer.start(meterRegistry);
+
+    // try {
+    // return repository.findTopSellingProducts(OrderStatus.DELIVERED,
+    // PageRequest.of(0, limit))
+    // .stream()
+    // .map(ProductMapper::toDetailsRecord)
+    // .toList();
+
+    // } finally {
+    // dbSample.stop(Timer.builder("ecommerce.db.query.latency")
+    // .tag("query", "findTopSellingProducts")
+    // .register(meterRegistry));
+    // }
+    // }
+
+    // private void sleepShortly() {
+    // try
+
+    // {
+    // Thread.sleep(250);
+    // }catch(
+    // InterruptedException e)
+    // {
+    // Thread.currentThread().interrupt();
+    // }
+    // }
 
     @Transactional
     // @CacheEvict(cacheNames = "topProducts", allEntries = true)
@@ -328,7 +508,7 @@ public class ProductService {
     }
 
     private void evictTopProductsCache() {
-        Set<String> keys = redisTemplate.keys("topProducts:*");
+        Set<String> keys = redisTemplate.keys("top-products:*");
 
         if (keys != null && !keys.isEmpty()) {
             redisTemplate.delete(keys);
