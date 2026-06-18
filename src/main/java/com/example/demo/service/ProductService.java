@@ -3,6 +3,7 @@ package com.example.demo.service;
 import com.example.demo.dto.ProductDetailsResponse;
 import com.example.demo.dto.UpdateProductRequest;
 import com.example.demo.exception.ProductNotFoundException;
+import com.example.demo.exception.QuantityNotSufficient;
 import com.example.demo.mapper.ProductMapper;
 import com.example.demo.model.OrderStatus;
 import com.example.demo.model.Product;
@@ -86,7 +87,7 @@ public class ProductService {
         Product product = repository.findByIdWithLock(id)
                 .orElseThrow(() -> new RuntimeException("product not found"));
         if (product.getQuantity() < quantity) {
-            throw new RuntimeException("quantity not sufficient");
+            throw new QuantityNotSufficient();
         }
         product.setQuantity(product.getQuantity() - quantity);
         return repository.save(product);
@@ -116,9 +117,9 @@ public class ProductService {
         Product product = repository.findByIdWithLock(id)
                 .orElseThrow(() -> new RuntimeException("product not found"));
 
-        if (product.getQuantity() < quantity) {
-            throw new RuntimeException("quantity not sufficient");
-        }
+        if (product.getQuantity() < quantity)
+            throw new QuantityNotSufficient();
+
         double totalAmount = product.getPrice() * quantity;
 
         paymentService.processPaymentSync(userId, totalAmount);
@@ -131,9 +132,9 @@ public class ProductService {
         Product product = repository.findByIdWithLock(id)
                 .orElseThrow(() -> new RuntimeException("product not found"));
 
-        if (product.getQuantity() < quantity) {
-            throw new RuntimeException("quantity not sufficient");
-        }
+        if (product.getQuantity() < quantity)
+            throw new QuantityNotSufficient();
+
         double totalAmount = product.getPrice() * quantity;
 
         paymentService.processPaymentAsync(userId, totalAmount);

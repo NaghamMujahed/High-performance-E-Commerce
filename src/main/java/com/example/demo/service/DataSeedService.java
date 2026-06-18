@@ -37,15 +37,15 @@ public class DataSeedService {
     private final Random random = new Random(20260612L);
 
     public DataSeedService(UserRepository userRepository,
-                           ProductRepository productRepository,
-                           SaleRepository saleRepository,
-                           CategoryRepository categoryRepository,
-                           CustomerAddressRepository addressRepository,
-                           CustomerOrderRepository orderRepository,
-                           OrderItemRepository orderItemRepository,
-                           PaymentRepository paymentRepository,
-                           InventoryTransactionRepository inventoryTransactionRepository,
-                           ProductReviewRepository productReviewRepository) {
+            ProductRepository productRepository,
+            SaleRepository saleRepository,
+            CategoryRepository categoryRepository,
+            CustomerAddressRepository addressRepository,
+            CustomerOrderRepository orderRepository,
+            OrderItemRepository orderItemRepository,
+            PaymentRepository paymentRepository,
+            InventoryTransactionRepository inventoryTransactionRepository,
+            ProductReviewRepository productReviewRepository) {
         this.userRepository = userRepository;
         this.productRepository = productRepository;
         this.saleRepository = saleRepository;
@@ -94,8 +94,7 @@ public class DataSeedService {
                 inventoryCreated,
                 ordersCreated,
                 salesCreated,
-                reviewsCreated
-        );
+                reviewsCreated);
 
         logger.info("[SEED] {}", result);
         return result;
@@ -116,14 +115,14 @@ public class DataSeedService {
 
     private List<Category> ensureCategories() {
         String[][] definitions = {
-                {"Electronics", "Phones, laptops, accessories, and connected devices."},
-                {"Home Appliances", "Kitchen, cleaning, and home comfort devices."},
-                {"Fashion", "Clothing, shoes, watches, and daily accessories."},
-                {"Books", "Technical, business, and personal development books."},
-                {"Sports", "Training equipment, outdoor gear, and fitness accessories."},
-                {"Beauty", "Skin care, grooming, and personal care products."},
-                {"Gaming", "Consoles, games, controllers, and streaming gear."},
-                {"Office", "Desk equipment, stationery, and productivity tools."}
+                { "Electronics", "Phones, laptops, accessories, and connected devices." },
+                { "Home Appliances", "Kitchen, cleaning, and home comfort devices." },
+                { "Fashion", "Clothing, shoes, watches, and daily accessories." },
+                { "Books", "Technical, business, and personal development books." },
+                { "Sports", "Training equipment, outdoor gear, and fitness accessories." },
+                { "Beauty", "Skin care, grooming, and personal care products." },
+                { "Gaming", "Consoles, games, controllers, and streaming gear." },
+                { "Office", "Desk equipment, stationery, and productivity tools." }
         };
 
         for (String[] definition : definitions) {
@@ -151,7 +150,7 @@ public class DataSeedService {
             user.setName("Customer " + i);
             user.setEmail("customer%05d@example.com".formatted(i));
             user.setPassword("password");
-            user.setBalance(round(250 + random.nextDouble() * 9750));
+            user.setBalance(1000000);
             user.setRole("CUSTOMER");
             user.setStatus(i % 25 == 0 ? "SUSPENDED" : "ACTIVE");
             user.setCreatedAt(randomDateTime(365));
@@ -168,8 +167,8 @@ public class DataSeedService {
             return 0;
         }
 
-        String[] brands = {"Nova", "Orion", "Pulse", "Apex", "Atlas", "Zen", "Vertex", "Nimbus"};
-        String[] productWords = {"Pro", "Max", "Lite", "Air", "Core", "Flex", "Prime", "Edge"};
+        String[] brands = { "Nova", "Orion", "Pulse", "Apex", "Atlas", "Zen", "Vertex", "Nimbus" };
+        String[] productWords = { "Pro", "Max", "Lite", "Air", "Core", "Flex", "Prime", "Edge" };
         List<Product> products = new ArrayList<>(missing);
         int start = Math.toIntExact(existing) + 1;
 
@@ -178,11 +177,12 @@ public class DataSeedService {
             String brand = brands[random.nextInt(brands.length)];
             Product product = new Product();
             product.setSku("SKU-%06d".formatted(i));
-            product.setName(category.getName() + " " + brand + " " + productWords[random.nextInt(productWords.length)] + " " + i);
+            product.setName(category.getName() + " " + brand + " " + productWords[random.nextInt(productWords.length)]
+                    + " " + i);
             product.setDescription("Seed product for load, query, inventory, and checkout experiments.");
             product.setBrand(brand);
-            product.setPrice(round(5 + random.nextDouble() * 995));
-            product.setQuantity(250 + random.nextInt(1750));
+            product.setPrice(round(5 + random.nextDouble() * 95));
+            product.setQuantity(2000);
             product.setReservedQuantity(random.nextInt(25));
             product.setStatus(ProductStatus.ACTIVE);
             product.setCategory(category);
@@ -199,7 +199,7 @@ public class DataSeedService {
             return 0;
         }
 
-        String[] cities = {"Damascus", "Aleppo", "Homs", "Latakia", "Tartus", "Hama", "Daraa", "Sweida"};
+        String[] cities = { "Damascus", "Aleppo", "Homs", "Latakia", "Tartus", "Hama", "Daraa", "Sweida" };
         List<CustomerAddress> addresses = new ArrayList<>(users.size() * 2);
 
         for (User user : users) {
@@ -295,7 +295,8 @@ public class DataSeedService {
                     Product product = pick(products);
                     int quantity = 1 + random.nextInt(4);
                     BigDecimal unitPrice = money(product.getPrice());
-                    BigDecimal lineTotal = unitPrice.multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
+                    BigDecimal lineTotal = unitPrice.multiply(BigDecimal.valueOf(quantity)).setScale(2,
+                            RoundingMode.HALF_UP);
                     subtotal = subtotal.add(lineTotal);
 
                     OrderItem item = new OrderItem();
@@ -326,11 +327,13 @@ public class DataSeedService {
                 }
 
                 BigDecimal tax = subtotal.multiply(BigDecimal.valueOf(0.08)).setScale(2, RoundingMode.HALF_UP);
-                BigDecimal shipping = random.nextBoolean() ? BigDecimal.ZERO : BigDecimal.valueOf(5 + random.nextInt(20)).setScale(2);
+                BigDecimal shipping = random.nextBoolean() ? BigDecimal.ZERO
+                        : BigDecimal.valueOf(5 + random.nextInt(20)).setScale(2);
                 BigDecimal discount = random.nextInt(10) == 0
                         ? subtotal.multiply(BigDecimal.valueOf(0.10)).setScale(2, RoundingMode.HALF_UP)
                         : BigDecimal.ZERO;
-                BigDecimal total = subtotal.add(tax).add(shipping).subtract(discount).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+                BigDecimal total = subtotal.add(tax).add(shipping).subtract(discount).max(BigDecimal.ZERO).setScale(2,
+                        RoundingMode.HALF_UP);
 
                 order.setSubtotal(subtotal.setScale(2, RoundingMode.HALF_UP));
                 order.setTaxAmount(tax);
@@ -418,7 +421,7 @@ public class DataSeedService {
         }
 
         int target = Math.min(5_000, products.size() * 6);
-        String[] titles = {"Great value", "Works as expected", "Fast delivery", "Good quality", "Would buy again"};
+        String[] titles = { "Great value", "Works as expected", "Fast delivery", "Good quality", "Would buy again" };
         List<ProductReview> reviews = new ArrayList<>(target);
 
         for (int i = 0; i < target; i++) {
@@ -439,11 +442,16 @@ public class DataSeedService {
 
     private OrderStatus randomOrderStatus() {
         double value = random.nextDouble();
-        if (value < 0.08) return OrderStatus.CREATED;
-        if (value < 0.18) return OrderStatus.CONFIRMED;
-        if (value < 0.42) return OrderStatus.PAID;
-        if (value < 0.62) return OrderStatus.SHIPPED;
-        if (value < 0.92) return OrderStatus.DELIVERED;
+        if (value < 0.08)
+            return OrderStatus.CREATED;
+        if (value < 0.18)
+            return OrderStatus.CONFIRMED;
+        if (value < 0.42)
+            return OrderStatus.PAID;
+        if (value < 0.62)
+            return OrderStatus.SHIPPED;
+        if (value < 0.92)
+            return OrderStatus.DELIVERED;
         return OrderStatus.CANCELLED;
     }
 
@@ -516,22 +524,22 @@ public class DataSeedService {
         private final int reviewsCreated;
 
         public SeedResult(long categories,
-                          long users,
-                          long products,
-                          long addresses,
-                          long orders,
-                          long orderItems,
-                          long payments,
-                          long inventoryTransactions,
-                          long reviews,
-                          long legacySales,
-                          int usersCreated,
-                          int productsCreated,
-                          int addressesCreated,
-                          int inventoryTransactionsCreated,
-                          int ordersCreated,
-                          int legacySalesCreated,
-                          int reviewsCreated) {
+                long users,
+                long products,
+                long addresses,
+                long orders,
+                long orderItems,
+                long payments,
+                long inventoryTransactions,
+                long reviews,
+                long legacySales,
+                int usersCreated,
+                int productsCreated,
+                int addressesCreated,
+                int inventoryTransactionsCreated,
+                int ordersCreated,
+                int legacySalesCreated,
+                int reviewsCreated) {
             this.categories = categories;
             this.users = users;
             this.products = products;
@@ -551,23 +559,73 @@ public class DataSeedService {
             this.reviewsCreated = reviewsCreated;
         }
 
-        public long getCategories() { return categories; }
-        public long getUsers() { return users; }
-        public long getProducts() { return products; }
-        public long getAddresses() { return addresses; }
-        public long getOrders() { return orders; }
-        public long getOrderItems() { return orderItems; }
-        public long getPayments() { return payments; }
-        public long getInventoryTransactions() { return inventoryTransactions; }
-        public long getReviews() { return reviews; }
-        public long getLegacySales() { return legacySales; }
-        public int getUsersCreated() { return usersCreated; }
-        public int getProductsCreated() { return productsCreated; }
-        public int getAddressesCreated() { return addressesCreated; }
-        public int getInventoryTransactionsCreated() { return inventoryTransactionsCreated; }
-        public int getOrdersCreated() { return ordersCreated; }
-        public int getLegacySalesCreated() { return legacySalesCreated; }
-        public int getReviewsCreated() { return reviewsCreated; }
+        public long getCategories() {
+            return categories;
+        }
+
+        public long getUsers() {
+            return users;
+        }
+
+        public long getProducts() {
+            return products;
+        }
+
+        public long getAddresses() {
+            return addresses;
+        }
+
+        public long getOrders() {
+            return orders;
+        }
+
+        public long getOrderItems() {
+            return orderItems;
+        }
+
+        public long getPayments() {
+            return payments;
+        }
+
+        public long getInventoryTransactions() {
+            return inventoryTransactions;
+        }
+
+        public long getReviews() {
+            return reviews;
+        }
+
+        public long getLegacySales() {
+            return legacySales;
+        }
+
+        public int getUsersCreated() {
+            return usersCreated;
+        }
+
+        public int getProductsCreated() {
+            return productsCreated;
+        }
+
+        public int getAddressesCreated() {
+            return addressesCreated;
+        }
+
+        public int getInventoryTransactionsCreated() {
+            return inventoryTransactionsCreated;
+        }
+
+        public int getOrdersCreated() {
+            return ordersCreated;
+        }
+
+        public int getLegacySalesCreated() {
+            return legacySalesCreated;
+        }
+
+        public int getReviewsCreated() {
+            return reviewsCreated;
+        }
 
         @Override
         public String toString() {

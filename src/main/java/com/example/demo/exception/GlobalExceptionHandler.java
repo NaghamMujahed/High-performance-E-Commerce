@@ -21,6 +21,26 @@ public class GlobalExceptionHandler {
                 "message", ex.getMessage());
     }
 
+    @ExceptionHandler(QuantityNotSufficient.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleQuantityNotSufficient(QuantityNotSufficient ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 404,
+                "error", "Quantity_Not_Sufficient",
+                "message", ex.getMessage());
+    }
+
+    @ExceptionHandler(BalanceNotFound.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public Map<String, Object> handleBalanceNotFound(BalanceNotFound ex) {
+        return Map.of(
+                "timestamp", LocalDateTime.now(),
+                "status", 404,
+                "error", "Balance_Not_Found",
+                "message", ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String, Object> handleValidation(MethodArgumentNotValidException ex) {

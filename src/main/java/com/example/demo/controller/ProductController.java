@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Arrays;
 import java.util.List;
@@ -81,6 +82,28 @@ public class ProductController {
     public Product buyAsync(@PathVariable Long id,
             @RequestParam int quantity,
             @RequestParam Long userId) {
+
+        if (role.equals("loadbalancer")) {
+            Server server = loadBalancerService.getBestServer();
+
+            try {
+
+                // String url = server.getUrl() + "/products/" + id + "/buy-async";
+
+                String url = UriComponentsBuilder
+                        .fromHttpUrl(server.getUrl() + "/products/" + id + "/buy-async")
+                        .queryParam("quantity", quantity)
+                        .queryParam("userId", userId)
+                        .toUriString();
+
+                return restTemplate.postForObject(url, null, Product.class);
+
+            } finally {
+
+                loadBalancerService.releaseServer(server);
+            }
+        }
+
         return service.buyWithPaymentAsync(id, quantity, userId);
     }
 

@@ -1,6 +1,7 @@
 package com.example.demo.service;
 
 import com.example.demo.config.RabbitMQConfig;
+import com.example.demo.exception.BalanceNotFound;
 import com.example.demo.model.User;
 import com.example.demo.repository.UserRepository;
 import org.slf4j.Logger;
@@ -13,14 +14,13 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class PaymentService {
 
-    private static final Logger logger =
-            LoggerFactory.getLogger(PaymentService.class);
+    private static final Logger logger = LoggerFactory.getLogger(PaymentService.class);
 
     private final RabbitTemplate rabbitTemplate;
     private final UserRepository userRepository;
 
     public PaymentService(RabbitTemplate rabbitTemplate,
-                          UserRepository userRepository) {
+            UserRepository userRepository) {
         this.rabbitTemplate = rabbitTemplate;
         this.userRepository = userRepository;
     }
@@ -30,7 +30,7 @@ public class PaymentService {
         User user = userRepository.findByIdWithLock(userId)
                 .orElseThrow(() -> new RuntimeException("user not found"));
         if (user.getBalance() < amount) {
-            throw new RuntimeException("insufficient balance");
+            throw new BalanceNotFound();
         }
         try {
             logger.info("[PAYMENT-SYNC] Processing payment for: {} | Amount: {}",
@@ -51,7 +51,7 @@ public class PaymentService {
         User user = userRepository.findByIdWithLock(userId)
                 .orElseThrow(() -> new RuntimeException("user not found"));
         if (user.getBalance() < amount) {
-            throw new RuntimeException("insufficient balance");
+            throw new BalanceNotFound();
         }
         user.setBalance(user.getBalance() - amount);
         userRepository.save(user);
@@ -61,11 +61,10 @@ public class PaymentService {
         rabbitTemplate.convertAndSend(
                 RabbitMQConfig.PAYMENT_EXCHANGE,
                 RabbitMQConfig.PAYMENT_KEY,
-                userId + ":" + amount
-        );
+                userId + ":" + amount);
     }
 
-    @RabbitListener(queues = RabbitMQConfig.PAYMENT_QUEUE , concurrency = "3-10")
+    @RabbitListener(queues = RabbitMQConfig.PAYMENT_QUEUE, concurrency = "3-10")
     public void handlePayment(String message) {
         try {
             String[] parts = message.split(":");
