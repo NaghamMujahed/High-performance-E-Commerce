@@ -7,27 +7,27 @@ import com.example.demo.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class PaymentService {
 
     private static final Logger logger = LoggerFactory.getLogger(PaymentService.class);
 
-    private final RabbitTemplate rabbitTemplate;
     private final UserRepository userRepository;
+    private final PaymentMessagePublisher paymentMessagePublisher;
 
-    public PaymentService(RabbitTemplate rabbitTemplate,
-            UserRepository userRepository) {
-        this.rabbitTemplate = rabbitTemplate;
+    public PaymentService(UserRepository userRepository, PaymentMessagePublisher paymentMessagePublisher) {
         this.userRepository = userRepository;
+        this.paymentMessagePublisher = paymentMessagePublisher;
     }
 
     @Transactional
     public boolean processPaymentSync(Long userId, double amount) {
-        User user = userRepository.findByIdWithLock(userId)
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("user not found"));
         if (user.getBalance() < amount) {
             throw new BalanceNotFound();
@@ -48,7 +48,7 @@ public class PaymentService {
 
     @Transactional
     public void processPaymentAsync(Long userId, double amount) {
-        User user = userRepository.findByIdWithLock(userId)
+        User user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("user not found"));
         if (user.getBalance() < amount) {
             throw new BalanceNotFound();
@@ -56,12 +56,21 @@ public class PaymentService {
         user.setBalance(user.getBalance() - amount);
         userRepository.save(user);
 
-        logger.info("[PAYMENT-QUEUE] Sending payment task for: {} | Amount: {}", user.getName(), amount);
+        publishPaymentAfterCommit(userId, amount);
+    }
 
-        rabbitTemplate.convertAndSend(
-                RabbitMQConfig.PAYMENT_EXCHANGE,
-                RabbitMQConfig.PAYMENT_KEY,
-                userId + ":" + amount);
+    private void publishPaymentAfterCommit(Long userId, double amount) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    paymentMessagePublisher.publishPaymentTask(userId, amount);
+                }
+            });
+            return;
+        }
+
+        paymentMessagePublisher.publishPaymentTask(userId, amount);
     }
 
     @RabbitListener(queues = RabbitMQConfig.PAYMENT_QUEUE, concurrency = "3-10")

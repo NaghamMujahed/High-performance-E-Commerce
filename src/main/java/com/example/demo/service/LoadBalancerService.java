@@ -8,7 +8,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 
 @Service
@@ -51,54 +50,25 @@ public class LoadBalancerService {
     }
 
 
-    public synchronized Server getBestServer() {
-
-        logger.info("========== BEFORE SELECTION ==========");
-
-        for (Server server : servers) {
-
-            logger.info(
-                    "Server: {} | Active: {} | Weight: {} | Score: {}",
-                    server.getUrl(),
-                    server.getActiveConnections(),
-                    server.getWeight(),
-                    server.getScore()
-            );
+    public Server getBestServer() {
+        if (servers.isEmpty()) {
+            throw new IllegalStateException("No backend servers configured");
         }
 
-        double minScore = servers.stream()
-                .mapToDouble(Server::getScore)
-                .min()
-                .orElse(0);
-
-        List<Server> candidates = servers.stream()
-                .filter(server -> server.getScore() == minScore)
-                .toList();
-
-
-        Server bestServer = candidates.stream()
-                .max(Comparator.comparingInt(Server::getWeight))
+        Server bestServer = servers.stream()
+                .min((left, right) -> {
+                    int scoreComparison = Double.compare(left.getScore(), right.getScore());
+                    if (scoreComparison != 0) {
+                        return scoreComparison;
+                    }
+                    return Integer.compare(right.getWeight(), left.getWeight());
+                })
                 .orElseThrow();
 
-        logger.info(
-                "Selected Server -> {}",
-                bestServer.getUrl()
-        );
-
         bestServer.incrementConnections();
-
-        logger.info("========== AFTER SELECTION ==========");
-
-        for (Server server : servers) {
-
-            logger.info(
-                    "Server: {} | Active: {} | Weight: {} | Score: {}",
-                    server.getUrl(),
-                    server.getActiveConnections(),
-                    server.getWeight(),
-                    server.getScore()
-            );
-        }
+        logger.debug("Selected Server -> {} | Active Connections: {}",
+                bestServer.getUrl(),
+                bestServer.getActiveConnections());
 
         return bestServer;
     }
@@ -108,7 +78,7 @@ public class LoadBalancerService {
 
         server.decrementConnections();
 
-        logger.info(
+        logger.debug(
                 "Released Server -> {} | Active Connections: {}",
                 server.getUrl(),
                 server.getActiveConnections()

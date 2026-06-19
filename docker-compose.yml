@@ -4,15 +4,17 @@ services:
 
   lb:
     build: .
-    container_name: load-balancer
+    cpus: "1.0"
+    mem_limit: 512m
 
     ports:
-      - "8080:8080"
+      - "${LB_PORT:-8080}:8080"
 
     environment:
       SERVER_PORT: 8080
       APP_ROLE: loadbalancer
       SPRING_BATCH_JOB_ENABLED: false
+      JAVA_TOOL_OPTIONS: "-XX:ActiveProcessorCount=2 -XX:CICompilerCount=2 -XX:MaxRAMPercentage=70 -Djava.security.egd=file:/dev/urandom"
 
       # host:port:weight
       BACKEND_INSTANCES: app1:8080:1,app2:8080:3,app3:8080:2
@@ -36,19 +38,22 @@ services:
 
   app1:
     build: .
+    cpus: "1.0"
+    mem_limit: 512m
     ports:
-      - "8081:8080"
+      - "${APP1_PORT:-8081}:8080"
     environment:
       - SERVER_PORT=8080
       - APP_ROLE=worker
       - APP_NAME=app1
-      - BATCH_JOB_ENABLED=true
+      - "JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=2 -XX:CICompilerCount=2 -XX:MaxRAMPercentage=70 -Djava.security.egd=file:/dev/urandom"
+      - BATCH_JOB_ENABLED=false
       - SPRING_BATCH_JOB_ENABLED=false
       - APP_SEED_ENABLED=true
-      - APP_SEED_USERS=1000
+      - APP_SEED_USERS=500
       - APP_SEED_PRODUCTS=500
-      - APP_SEED_ORDERS=5000
-      - APP_SEED_SALES=20000
+      - APP_SEED_ORDERS=1000
+      - APP_SEED_SALES=2000
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
     depends_on:
@@ -63,13 +68,16 @@ services:
 
   app2:
     build: .
+    cpus: "1.0"
+    mem_limit: 512m
     ports:
-      - "8082:8080"
+      - "${APP2_PORT:-8082}:8080"
     environment:
       - SERVER_PORT=8080
       - APP_ROLE=worker
       - APP_NAME=app2
-      - BATCH_JOB_ENABLED=true
+      - "JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=2 -XX:CICompilerCount=2 -XX:MaxRAMPercentage=70 -Djava.security.egd=file:/dev/urandom"
+      - BATCH_JOB_ENABLED=false
       - SPRING_BATCH_JOB_ENABLED=false
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
@@ -85,13 +93,16 @@ services:
 
   app3:
     build: .
+    cpus: "1.0"
+    mem_limit: 512m
     ports:
-      - "8083:8080"
+      - "${APP3_PORT:-8083}:8080"
     environment:
       - SERVER_PORT=8080
       - APP_ROLE=worker
       - APP_NAME=app3
-      - BATCH_JOB_ENABLED=true
+      - "JAVA_TOOL_OPTIONS=-XX:ActiveProcessorCount=2 -XX:CICompilerCount=2 -XX:MaxRAMPercentage=70 -Djava.security.egd=file:/dev/urandom"
+      - BATCH_JOB_ENABLED=false
       - SPRING_BATCH_JOB_ENABLED=false
       - SPRING_DATA_REDIS_HOST=redis
       - SPRING_DATA_REDIS_PORT=6379
@@ -115,16 +126,16 @@ services:
     healthcheck:
       test: [ "CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot" ]
       interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      timeout: 10s
+      retries: 12
+      start_period: 90s
     networks:
       - ecommerce-net
 
   redis:
     image: redis:alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
@@ -136,10 +147,9 @@ services:
 
   rabbitmq:
     image: rabbitmq:3-management
-    container_name: rabbitmq
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "${RABBITMQ_AMQP_PORT:-5672}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
 
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq

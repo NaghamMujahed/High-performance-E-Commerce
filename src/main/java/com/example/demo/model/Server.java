@@ -33,7 +33,7 @@ public class Server {
     }
 
     public void decrementConnections() {
-        activeConnections.decrementAndGet();
+        activeConnections.updateAndGet(value -> value > 0 ? value - 1 : 0);
     }
 
     public double getScore() {

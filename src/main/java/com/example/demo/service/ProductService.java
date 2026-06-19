@@ -212,9 +212,13 @@ public class ProductService {
     // ************************** Cache Redis Methods *************************** //
 
     // This method for handling redis failure.
-    public List<ProductDetailsResponse> safeGetTopProductDetails(int limit) {
+    public List<ProductDetailsResponse> safeGetTopProductDetails(int limit, boolean withLock) {
         try {
-            return getTopProductDetailsByCache(limit);
+            if (withLock)
+                return getTopProductDetailsByCacheWithLock(limit, withLock);
+
+            return getTopProductDetailsByCacheWithoutLock(limit, withLock);
+
         } catch (RedisConnectionFailureException ex) {
             meterRegistry.counter("ecommerce.redis.fallback", "cache", "topProducts").increment();
             log.warn("Redis unavailable, falling back to DB for top products limit={}", limit);
@@ -222,10 +226,10 @@ public class ProductService {
         }
     }
 
-    public List<ProductDetailsResponse> getTopProductDetailsByCache(int limit) {
-        String freshKey = freshKey(limit);
-        String staleKey = staleKey(limit);
-        // String lockKey = lockKey(limit);
+    public List<ProductDetailsResponse> getTopProductDetailsByCacheWithLock(int limit, boolean withLock) {
+        String freshKey = freshKey(limit, withLock);
+        String staleKey = staleKey(limit, withLock);
+        String lockKey = lockKey(limit);
 
         List<ProductDetailsResponse> fresh = readListFromRedis(freshKey);
 
@@ -237,69 +241,90 @@ public class ProductService {
 
         incrementCacheMetric("app.cache.miss", "topProducts");
 
-        // RLock lock = redissonClient.getLock(lockKey);
+        RLock lock = redissonClient.getLock(lockKey);
 
-        // boolean acquired = false;
-        // Timer.Sample waitSample = Timer.start(meterRegistry);
+        boolean acquired = false;
+        Timer.Sample waitSample = Timer.start(meterRegistry);
 
         try {
-            // acquired = lock.tryLock(150, 10, TimeUnit.MILLISECONDS); // waitTime = 150ms,
-            // leaseTime = 10s
+            acquired = lock.tryLock(150, 10, TimeUnit.MILLISECONDS); // waitTime = 150ms, leaseTime = 10s
 
-            // waitSample.stop(Timer.builder("app.distributed_lock.wait")
-            // .tag("lock", "topProductsRebuild")
-            // .register(meterRegistry));
+            waitSample.stop(Timer.builder("app.distributed_lock.wait")
+                    .tag("lock", "topProductsRebuild")
+                    .register(meterRegistry));
 
-            // if (acquired) {
-            // incrementLockMetric("app.distributed_lock.acquired", "topProductsRebuild");
+            if (acquired) {
+                incrementLockMetric("app.distributed_lock.acquired", "topProductsRebuild");
 
-            // return rebuildCacheWithDoubleCheck(limit, freshKey, staleKey);
-            // }
+                return rebuildCacheWithDoubleCheck(limit, freshKey, staleKey, withLock);
+            }
 
-            // incrementLockMetric("app.distributed_lock.skipped", "topProductsRebuild");
+            incrementLockMetric("app.distributed_lock.skipped", "topProductsRebuild");
 
-            // List<ProductDetailsResponse> stale = readListFromRedis(staleKey);
+            List<ProductDetailsResponse> stale = readListFromRedis(staleKey);
 
-            // if (stale != null) {
-            // incrementCacheMetric("app.cache.stale_served", "topProducts");
-            // return stale;
-            // }
+            if (stale != null) {
+                incrementCacheMetric("app.cache.stale_served", "topProducts");
+                return stale;
+            }
 
-            // sleepBriefly();
+            sleepBriefly();
 
-            // List<ProductDetailsResponse> afterWait = readListFromRedis(freshKey);
+            List<ProductDetailsResponse> afterWait = readListFromRedis(freshKey);
 
-            // if (afterWait != null) {
-            // incrementCacheMetric("app.cache.hit_after_wait", "topProducts");
-            // return afterWait;
-            // }
+            if (afterWait != null) {
+                incrementCacheMetric("app.cache.hit_after_wait", "topProducts");
+                return afterWait;
+            }
 
-            // incrementCacheMetric("app.cache.fallback_db", "topProducts");
+            incrementCacheMetric("app.cache.fallback_db", "topProducts");
 
             // Fallback أخير:
             // نقرأ قاعدة البيانات حتى لا يفشل الطلب، لكن لا نعيد بناء الكاش هنا
             // لأننا لم نملك قفل.
-            return rebuildCacheWithDoubleCheck(limit, freshKey, staleKey);
+            return loadTopProductsFromDb(limit);
 
         } catch (Exception ex) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while waiting for top products lock", ex);
 
+        } finally {
+            if (acquired && lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
         }
-        // finally {
-        // // if (acquired && lock.isHeldByCurrentThread()) {
-        // // lock.unlock();
-        // // }
-        // }
     }
 
-    private List<ProductDetailsResponse> rebuildCacheWithDoubleCheck(int limit, String freshKey, String staleKey) {
+    public List<ProductDetailsResponse> getTopProductDetailsByCacheWithoutLock(int limit, boolean withLock) {
+        String freshKey = freshKey(limit, withLock);
+        String staleKey = staleKey(limit, withLock);
+
+        List<ProductDetailsResponse> fresh = readListFromRedis(freshKey);
+
+        if (fresh != null) {
+            incrementCacheMetric("app.cache.hit", "topProducts");
+
+            return fresh;
+        }
+
+        incrementCacheMetric("app.cache.miss", "topProducts");
+
+        try {
+            return rebuildCacheWithDoubleCheck(limit, freshKey, staleKey, withLock);
+        } catch (Exception ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while waiting for top products lock", ex);
+        }
+    }
+
+    private List<ProductDetailsResponse> rebuildCacheWithDoubleCheck(int limit, String freshKey, String staleKey,
+            boolean withLock) {
 
         // Double-check:
         // ربما thread آخر بنى الكاش بين miss وأخذ lock.
         List<ProductDetailsResponse> existing = readListFromRedis(freshKey);
 
-        if (existing != null) {
+        if (existing != null && withLock) {
             incrementCacheMetric("app.cache.hit_after_lock", "topProducts");
             return existing;
         }
@@ -312,14 +337,20 @@ public class ProductService {
                 .tag("cache", "topProducts")
                 .register(meterRegistry));
 
-        Duration freshTtl = Duration.ofSeconds(90)
-                .plusSeconds(ThreadLocalRandom.current().nextInt(0, 10));
+        if (withLock) {
+            Duration freshTtl = Duration.ofSeconds(90)
+                    .plusSeconds(ThreadLocalRandom.current().nextInt(0, 10));
 
-        Duration staleTtl = Duration.ofMinutes(10);
+            Duration staleTtl = Duration.ofMinutes(10);
 
-        redisTemplate.opsForValue().set(freshKey, loaded, freshTtl);
-        redisTemplate.opsForValue().set(staleKey, loaded, staleTtl);
+            redisTemplate.opsForValue().set(freshKey, loaded, freshTtl);
+            redisTemplate.opsForValue().set(staleKey, loaded, staleTtl);
+        } else {
+            Duration freshTtl = Duration.ofMinutes(5)
+                    .plusSeconds(ThreadLocalRandom.current().nextInt(0, 10));
 
+            redisTemplate.opsForValue().set(freshKey, loaded, freshTtl);
+        }
         incrementCacheMetric("app.cache.rebuild.success", "topProducts");
 
         return loaded;
@@ -355,12 +386,18 @@ public class ProductService {
         return (List<ProductDetailsResponse>) value;
     }
 
-    private String freshKey(int limit) {
-        return "top-products:limit:" + limit;
+    private String freshKey(int limit, boolean withLock) {
+        if (withLock)
+            return "top-products:limit:with-lock:" + limit;
+
+        return "top-products:limit:without-lock:" + limit;
     }
 
-    private String staleKey(int limit) {
-        return "top-products:stale:limit:" + limit;
+    private String staleKey(int limit, boolean withLock) {
+        if (withLock)
+            return "top-products:stale:limit:with-lock:" + limit;
+
+        return "top-products:stale:limit:without-lock:" + limit;
     }
 
     private String lockKey(int limit) {
@@ -382,118 +419,6 @@ public class ProductService {
             Thread.currentThread().interrupt();
         }
     }
-
-    // @SuppressWarnings("unchecked")
-    // public List<ProductDetailsResponse> getTopProductDetailsByCache(int limit) {
-    // String key = "topProducts:" + limit;
-
-    // Timer.Sample redisGetSample = Timer.start(meterRegistry);
-
-    // Object cached = null;
-    // try {
-    // cached = redisTemplate.opsForValue().get(key);
-    // } finally {
-    // redisGetSample.stop(Timer.builder("ecommerce.redis.latency")
-    // .tag("operation", "GET")
-    // .tag("cache", "topProducts")
-    // .register(meterRegistry));
-    // }
-
-    // if (cached != null && cached instanceof List<?> response) {
-    // meterRegistry.counter("ecommerce.cache.hit", "cache",
-    // "topProducts").increment();
-    // log.info("CACHE_HIT cache=topProducts key={}", key);
-
-    // return (List<ProductDetailsResponse>) response;
-    // }
-
-    // meterRegistry.counter("ecommerce.cache.miss", "cache",
-    // "topProducts").increment();
-    // log.info("CACHE_MISS cache=topProducts key={}", key);
-
-    // String lockKey = "lock:" + key;
-    // Boolean lockAcquired = stringRedisTemplate.opsForValue()
-    // .setIfAbsent(lockKey, "1", Duration.ofSeconds(5));
-
-    // if (Boolean.TRUE.equals(lockAcquired)) {
-    // try {
-    // List<ProductDetailsResponse> loaded = loadTopProductsFromDb(limit);
-
-    // Duration ttlWithJitter = Duration.ofMinutes(5)
-    // .plusSeconds(ThreadLocalRandom.current().nextInt(0, 30));
-
-    // Timer.Sample redisSetSample = Timer.start(meterRegistry);
-
-    // try {
-    // redisTemplate.opsForValue().set(key, loaded, ttlWithJitter);
-    // } finally {
-    // redisSetSample.stop(Timer.builder("ecommerce.redis.latency")
-    // .tag("operation", "SET")
-    // .tag("cache", "topProducts")
-    // .register(meterRegistry));
-    // }
-
-    // return loaded;
-    // } finally {
-    // stringRedisTemplate.delete(lockKey);
-    // }
-    // }
-
-    // meterRegistry.counter("ecommerce.cache.lock_wait", "cache",
-    // "topProducts").increment();
-    // /*
-    // * اذا لم يحصل هذا الطلب على قفل.
-    // * ننتظر قليلاً ثم نحاول قراءة الكاش مرة أخرى.
-    // */
-    // sleepShortly();
-
-    // Object afterWait = redisTemplate.opsForValue().get(key);
-    // if (afterWait instanceof List<?> response) {
-    // meterRegistry.counter("ecommerce.cache.hit_after_wait", "cache",
-    // "topProducts").increment();
-    // return (List<ProductDetailsResponse>) response;
-    // }
-
-    // /*
-    // * fallback: نقرأ من قاعدة البيانات بشكل مباشر حتى لا يتعطل الطلب.
-    // */
-    // meterRegistry.counter("ecommerce.cache.fallback_to_db_after_wait", "cache",
-    // "topProducts").increment();
-
-    // return loadTopProductsFromDb(limit);
-    // }
-
-    // public List<ProductDetailsResponse> loadTopProductsFromDb(int limit) {
-    // meterRegistry.counter("ecommerce.db.query", "query",
-    // "findTopSellingProducts").increment();
-
-    // Timer.Sample dbSample = Timer.start(meterRegistry);
-
-    // try {
-    // return repository.findTopSellingProducts(OrderStatus.DELIVERED,
-    // PageRequest.of(0, limit))
-    // .stream()
-    // .map(ProductMapper::toDetailsRecord)
-    // .toList();
-
-    // } finally {
-    // dbSample.stop(Timer.builder("ecommerce.db.query.latency")
-    // .tag("query", "findTopSellingProducts")
-    // .register(meterRegistry));
-    // }
-    // }
-
-    // private void sleepShortly() {
-    // try
-
-    // {
-    // Thread.sleep(250);
-    // }catch(
-    // InterruptedException e)
-    // {
-    // Thread.currentThread().interrupt();
-    // }
-    // }
 
     @Transactional
     // @CacheEvict(cacheNames = "topProducts", allEntries = true)

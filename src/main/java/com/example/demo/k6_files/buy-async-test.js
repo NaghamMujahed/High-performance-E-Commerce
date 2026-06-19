@@ -1,9 +1,15 @@
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 
+const BASE_URL = 'http://localhost:8080';
+const PRODUCT_ID = '1';
+const USER_ID = '1';
+const QUANTITY = '1';
+const REQUEST_TIMEOUT = '180s';
+
 export const options = {
     stages: [
-        { duration: '5s', target: 100 },
+        { duration: '2s', target: 100 },
     ],
 
     // thresholds: {
@@ -15,7 +21,11 @@ export const options = {
 export default function () {
     // const limit = 10;
 
-    const res = http.post(`http://localhost:8080/products/754/buy-async?quantity=1&userId=1305`);
+    const res = http.post(
+        `${BASE_URL}/products/${PRODUCT_ID}/buy-async?quantity=${QUANTITY}&userId=${USER_ID}`,
+        null,
+        { timeout: REQUEST_TIMEOUT },
+    );
 
     check(res, {
         'status is 200': (r) => r.status === 200,

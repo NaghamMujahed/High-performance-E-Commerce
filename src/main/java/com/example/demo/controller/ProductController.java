@@ -5,13 +5,18 @@ import com.example.demo.dto.UpdateProductRequest;
 import com.example.demo.model.Product;
 import com.example.demo.model.Server;
 import com.example.demo.service.LoadBalancerService;
+import com.example.demo.service.ProductRequestQueue;
 import com.example.demo.service.ProductService;
-
 import jakarta.validation.Valid;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.util.Arrays;
@@ -29,12 +34,14 @@ public class ProductController {
     private RestTemplate restTemplate;
 
     private final ProductService service;
+    private final ProductRequestQueue productRequestQueue;
 
     public ProductController(ProductService service, RestTemplate restTemplate,
-            LoadBalancerService loadBalancerService) {
+            LoadBalancerService loadBalancerService, ProductRequestQueue productRequestQueue) {
         this.service = service;
         this.restTemplate = restTemplate;
         this.loadBalancerService = loadBalancerService;
+        this.productRequestQueue = productRequestQueue;
     }
 
     @GetMapping
@@ -84,27 +91,31 @@ public class ProductController {
             @RequestParam Long userId) {
 
         if (role.equals("loadbalancer")) {
-            Server server = loadBalancerService.getBestServer();
-
-            try {
-
-                // String url = server.getUrl() + "/products/" + id + "/buy-async";
-
-                String url = UriComponentsBuilder
-                        .fromHttpUrl(server.getUrl() + "/products/" + id + "/buy-async")
-                        .queryParam("quantity", quantity)
-                        .queryParam("userId", userId)
-                        .toUriString();
-
-                return restTemplate.postForObject(url, null, Product.class);
-
-            } finally {
-
-                loadBalancerService.releaseServer(server);
-            }
+            return productRequestQueue.executeForProduct(id, () -> forwardBuyAsync(id, quantity, userId));
         }
-
         return service.buyWithPaymentAsync(id, quantity, userId);
+    }
+
+    private Product forwardBuyAsync(Long id, int quantity, Long userId) {
+        Server server = loadBalancerService.getBestServer();
+
+        try {
+            String url = UriComponentsBuilder
+                    .fromHttpUrl(server.getUrl() + "/products/" + id + "/buy-async")
+                    .queryParam("quantity", quantity)
+                    .queryParam("userId", userId)
+                    .toUriString();
+
+            return restTemplate.postForObject(url, null, Product.class);
+        } catch (ResourceAccessException ex) {
+            throw new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT, "Worker did not respond in time", ex);
+        } catch (RestClientResponseException ex) {
+            throw new ResponseStatusException(ex.getStatusCode(), ex.getResponseBodyAsString(), ex);
+        } catch (RestClientException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Worker request failed", ex);
+        } finally {
+            loadBalancerService.releaseServer(server);
+        }
     }
 
     @DeleteMapping
@@ -151,7 +162,7 @@ public class ProductController {
 
     @GetMapping("/top-selling/by-cache")
     public List<ProductDetailsResponse> getTopSellingByCache(
-            @RequestParam(defaultValue = "10") int limit) {
+            @RequestParam(defaultValue = "10") int limit, @RequestParam(defaultValue = "true") boolean withLock) {
 
         if (role.equals("loadbalancer")) {
             Server server = loadBalancerService.getBestServer();
@@ -166,7 +177,7 @@ public class ProductController {
                 loadBalancerService.releaseServer(server);
             }
         }
-        return service.safeGetTopProductDetails(limit);
+        return service.safeGetTopProductDetails(limit, withLock);
     }
 
     @PutMapping("/{productId}")
