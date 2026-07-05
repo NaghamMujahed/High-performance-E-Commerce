@@ -9,7 +9,7 @@ const REQUEST_TIMEOUT = '180s';
 
 export const options = {
     stages: [
-        { duration: '2s', target: 100 },
+        { duration: '2s', target: 50 },
     ],
 
     // thresholds: {
@@ -22,7 +22,7 @@ export default function () {
     // const limit = 10;
 
     const res = http.post(
-        `${BASE_URL}/products/${PRODUCT_ID}/buy-async?quantity=${QUANTITY}&userId=${USER_ID}`,
+        `${BASE_URL}/products/with-Virtual/${PRODUCT_ID}?quantity=${QUANTITY}`,
         null,
         { timeout: REQUEST_TIMEOUT },
     );

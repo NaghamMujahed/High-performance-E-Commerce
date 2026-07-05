@@ -5,13 +5,10 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(
-        name = "order_items",
-        indexes = {
-                @Index(name = "idx_order_items_order", columnList = "order_id"),
-                @Index(name = "idx_order_items_product", columnList = "product_id")
-        }
-)
+@Table(name = "order_items", indexes = {
+        @Index(name = "idx_order_items_order", columnList = "order_id"),
+        @Index(name = "idx_order_items_product", columnList = "product_id")
+})
 public class OrderItem {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -32,7 +29,8 @@ public class OrderItem {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    public OrderItem() {}
+    public OrderItem() {
+    }
 
     @PrePersist
     public void prePersist() {
@@ -41,21 +39,82 @@ public class OrderItem {
         }
     }
 
-    public Long getId() { return id; }
-    public CustomerOrder getOrder() { return order; }
-    public Product getProduct() { return product; }
-    public String getProductNameSnapshot() { return productNameSnapshot; }
-    public BigDecimal getUnitPrice() { return unitPrice; }
-    public int getQuantity() { return quantity; }
-    public BigDecimal getLineTotal() { return lineTotal; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
+    public Long getId() {
+        return id;
+    }
 
-    public void setId(Long id) { this.id = id; }
-    public void setOrder(CustomerOrder order) { this.order = order; }
-    public void setProduct(Product product) { this.product = product; }
-    public void setProductNameSnapshot(String productNameSnapshot) { this.productNameSnapshot = productNameSnapshot; }
-    public void setUnitPrice(BigDecimal unitPrice) { this.unitPrice = unitPrice; }
-    public void setQuantity(int quantity) { this.quantity = quantity; }
-    public void setLineTotal(BigDecimal lineTotal) { this.lineTotal = lineTotal; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public CustomerOrder getOrder() {
+        return order;
+    }
+
+    public Product getProduct() {
+        return product;
+    }
+
+    public String getProductNameSnapshot() {
+        return productNameSnapshot;
+    }
+
+    public BigDecimal getUnitPrice() {
+        return unitPrice;
+    }
+
+    public int getQuantity() {
+        return quantity;
+    }
+
+    public BigDecimal getLineTotal() {
+        return lineTotal;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setId(Long id) {
+        this.id = id;
+    }
+
+    public void setOrder(CustomerOrder order) {
+        this.order = order;
+    }
+
+    public void setProduct(Product product) {
+        this.product = product;
+    }
+
+    public void setProductNameSnapshot(String productNameSnapshot) {
+        this.productNameSnapshot = productNameSnapshot;
+    }
+
+    public void setUnitPrice(BigDecimal unitPrice) {
+        this.unitPrice = unitPrice;
+    }
+
+    public void setQuantity(int quantity) {
+        this.quantity = quantity;
+    }
+
+    public void setLineTotal(BigDecimal lineTotal) {
+        this.lineTotal = lineTotal;
+    }
+
+    public void setCreatedAt(LocalDateTime createdAt) {
+        this.createdAt = createdAt;
+    }
+
+    public static OrderItem create(
+            CustomerOrder order,
+            Long productId,
+            int quantity) {
+        OrderItem item = new OrderItem();
+        item.order = order;
+        item.productId = productId;
+        item.quantity = quantity;
+        return item;
+    }
+
+    public void attachToOrder(CustomerOrder order) {
+        this.order = order;
+    }
 }
